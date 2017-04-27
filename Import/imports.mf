@@ -1,0 +1,3 @@
+<imports>
+  <package name="MyCalendar" path="MyCalendar\Import" />
+</imports>

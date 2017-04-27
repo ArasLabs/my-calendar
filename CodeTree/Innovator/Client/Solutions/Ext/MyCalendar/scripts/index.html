@@ -1,0 +1,343 @@
+﻿<!DOCTYPE html>
+<!-- (c) Copyright by Aras Corporation, 2004-2013. -->
+<html>
+<head>
+	<title>My Calendar</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<!-- CSS -->
+<link href="../styles/fullcalendar.min.css" rel="stylesheet" type="text/css">
+<style type="text/css">
+a:hover{
+	text-decoration: none;
+}
+#calendar{
+	width: 720px;
+	margin: 0 auto;
+}
+.class-wf{
+	border-color: #4169e1;
+	background: #4169e1;
+	color: #fff;
+}
+.class-pj{
+	border-color: #ff1493;
+	background: #ff1493;
+	color: #fff;
+}
+.class-ms{
+	border-color: #32cd32;
+	background: #32cd32;
+	color: #fff;
+}
+
+html, body {
+    height: 100%;
+    overflow: auto;
+}
+#wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+}
+* html #tooltip {
+    position: absolute;
+}
+.tooltip-wf {
+  position: fixed;
+  opacity: 80;
+  z-index: 100; 
+  padding: 0.3em 0.5em;
+  color: #FFFFFF;
+  background: #00008b;
+  border-radius: 0.5em;
+}
+.tooltip-wf:after {
+  width: 100%;
+  content: "";
+  position: absolute;
+  z-index: 100; 
+  left: 0.5em;
+  top: -8px;
+  border-top:8px solid transparent;
+  border-left:8px solid #00008b;
+}
+.tooltip-pj {
+  position: fixed;
+  opacity: 80;
+  z-index: 100; 
+  padding: 0.3em 0.5em;
+  color: #FFFFFF;
+  background: #c72439;
+  border-radius: 0.5em;
+}
+.tooltip-pj:after {
+  width: 100%;
+  content: "";
+  position: absolute;
+  z-index: 100; 
+  left: 0.5em;
+  top: -8px;
+  border-top:8px solid transparent;
+  border-left:8px solid #c72439;
+}
+.tooltip-ms {
+  position: fixed;
+  opacity: 80;
+  z-index: 100; 
+  padding: 0.3em 0.5em;
+  color: #FFFFFF;
+  background: #228b22;
+  border-radius: 0.5em;
+}
+.tooltip-ms:after {
+  width: 100%;
+  content: "";
+  position: absolute;
+  z-index: 100; 
+  left: 0.5em;
+  top: -8px;
+  border-top:8px solid transparent;
+  border-left:8px solid #228b22;
+}
+
+</style>
+
+<!-- JavaScript -->
+<script type="text/javascript" src="../javascript/moment.min.js"></script>
+<script type="text/javascript" src="../javascript/jquery.min.js"></script>
+<script type="text/javascript" src="../javascript/jquery-ui.custom.min.js"></script>
+<script type="text/javascript" src="../javascript/fullcalendar.min.js"></script>
+<!--script type="text/javascript" src="../javascript/ja.js"></script-->
+<script type="text/javascript" src="../../../../javascript/dialog.js"></script>
+<script type="text/javascript" src="../../../../javascript/include.aspx?files=TopWindowHelper"></script>
+<script type="text/javascript" src="../../../../javascript/include.aspx?classes=ScriptSet1"></script>
+
+</head>
+
+<body>
+<div id="calendar"></div>
+
+<script type="text/javascript">
+	//-------------------
+	// グローバル変数
+	//-------------------
+	var arasObj = TopWindowHelper.getMostTopWindowWithAras(window).aras;
+	var aras = new Aras(arasObj);
+	
+	var monthRange = 4;
+	
+	var criterion = new Date();
+	var stDt = new Date();
+	var edDt = new Date();
+
+	//カレンダー情報の初期読み込み
+	init();
+
+	//-------------------
+	//初期化処理
+	//-------------------
+	function init(){
+		initCalendar();
+		
+		// 現在日付の取得
+		var now = new Date();
+		
+		// 初期表示用startDate,endDateの計算
+		stDt = computeMonth(now.getFullYear(), (now.getMonth()+1), -monthRange);
+		edDt = computeMonth(now.getFullYear(), (now.getMonth()+1), monthRange);
+		
+		var startDate = formatDateToString(stDt, 's');
+		var endDate = formatDateToString(edDt, 'e');
+		
+		var calendarInfo = getCalendarInfo(startDate, endDate);
+		setRenderEven(JSON.parse(calendarInfo));
+	}
+
+	//-------------------
+	// 年月を指定して月末日を求める関数
+	// year 年
+	// month 月
+	//-------------------
+	function getMonthEndDay(year, month) {
+		//日付を0にすると前月の末日を指定したことになります
+		//指定月の翌月の0日を取得して末日を求めます
+		//そのため、ここでは month - 1 は行いません
+		var dt = new Date(year, month, 0);
+		return dt.getDate();
+	}
+
+	//-------------------
+	// 年月日と加算月からnヶ月後、nヶ月前の日付を求める
+	// year 年
+	// month 月
+	// addMonths 加算月。マイナス指定でnヶ月前も設定可能
+	//-------------------
+	function computeMonth(year, month, addMonths) {
+		month += addMonths;
+		var dt = new Date(year, month - 1, 1);
+		return dt;
+	}
+
+	//-------------------
+	// 日付オブジェクトとフラグから月初又は月末の日付を'YYYY-MM-DD'形式で求める
+	// dt 日付オブジェクト
+	// flg s:月初/e:月末
+	//-------------------
+	function formatDateToString(dt, flg) {
+		var day = (flg==='s') ? "01" : getMonthEndDay(dt.getFullYear(),( dt.getMonth()+1 ));
+		return dt.getFullYear() + "-" + ( "0"+( dt.getMonth()+1 ) ).slice(-2)+ "-" + day;
+	}
+
+	//-------------------
+	//カレンダーの基本設定
+	//-------------------
+	function initCalendar(){
+		$('#calendar').fullCalendar({
+			//ヘッダーの設定
+			header:{
+				//それぞれの位置に設置するボタンやタイトルをスペース区切りで指定できます。指定しない場合、非表示にできます。
+				// 'title'→月・週・日のそれぞれの表示に応じたタイトル
+				// 'prev'→前へボタン
+				// 'next'→次へボタン
+				// 'today'→当日表示ボタン
+				left: 'today prev', //左側に配置する要素
+				center: 'title', //中央に配置する要素
+				right: 'next' //右側に配置する要素
+			},
+			titleFormat: {
+				month: 'MM / YYYY'
+			},			eventClick:function(event, jsEvent){
+				aras.uiShowItem(event.targetItem, event.linkid);
+			},
+			eventMouseover: function(calEvent, jsEvent) {
+				$('body').prepend(calEvent.tooltip);
+
+				xOffset = -110 + $('#tooltip').height();
+				yOffset = -20;
+
+				$('#tooltip')
+				.css('top', (jsEvent.clientY - xOffset) + 'px')
+				.css('left', (jsEvent.clientX + yOffset) + 'px')
+				.fadeIn();
+				
+				$('#tooltip')
+				.css('top', (jsEvent.clientY - xOffset) + 'px')
+				.css('left', (jsEvent.clientX + yOffset) + 'px')
+				.fadeIn();
+			},
+			eventMouseout: function(calEvent, jsEvent) {
+				$('#tooltip').remove();
+			},
+			eventDblClick : function(event, jsEvent){
+				alert("＼(^o^)／");
+			}
+		});
+	}
+
+	//-------------------
+	//カレンダー情報取得
+	//-------------------
+	function getCalendarInfo(startDate,endDate){
+		var returnObj ="";
+		
+		// 期間情報をボディに設定(XML形式の文字列)
+		var body = "<startDate is_null='1'>" + startDate + "</startDate><endDate is_null='1'>" + endDate + "</endDate>";
+		
+		//カレンダー情報の取得
+		var res = aras.applyMethod("Ext_GetCalendarInfo", body);
+
+		if(res)
+		{
+			var xDoc = aras.createXMLDocument();
+			xDoc.loadXML(res);
+			returnObj = xDoc.selectSingleNode("Result").text;
+		}
+		return returnObj;
+	}
+
+	//-------------------
+	//カレンダー情報のイベント設定
+	//-------------------
+	function setRenderEven(jsonEvents){
+		//JSONでイベントを読み込み
+		for(i in jsonEvents){
+			$('#calendar').fullCalendar('renderEvent', jsonEvents[i], true);
+		}
+	}
+	//-------------------
+	//Voteダイアログの呼び出し
+	//-------------------
+	function showModalDialogWithDelay(url, paramsObj, windowOptions, doRepopulateAfterDialog) {
+		setTimeout(function () {
+			windowOptions.resizable = true;
+			windowOptions.scroll = true;
+			windowOptions.status = false;
+			windowOptions.help = false;
+			var callbacks = {
+				oncancel: function () {
+					doSearch();
+				}
+			};
+			arasObj.modalDialogHelper.show("DefaultPopup", aras.getMainWindow().main, paramsObj, windowOptions, url, callbacks);
+		}, 10);
+	};
+	
+	$(function(){
+		//-------------------
+		//preview、nextボタン処理の追加処理
+		//-------------------
+		$('.fc-prev-button').click(function(e){
+			
+			// 基準付の取得
+			var now = criterion;
+			now = computeMonth(now.getFullYear(), (now.getMonth()+1), -1);
+			criterion = now;
+			if(now.getTime() != stDt.getTime()){ return;}
+			
+			// 表示用startDate,endDateの計算
+			stDt = computeMonth(now.getFullYear(), (now.getMonth()+1), -monthRange);
+			edDt = computeMonth(now.getFullYear(), (now.getMonth()+1), monthRange);
+			
+			var startDate = formatDateToString(stDt, 's');
+			var endDate = formatDateToString(edDt, 'e');
+
+			$('#calendar').fullCalendar('removeEvents');
+			setRenderEven(JSON.parse(getCalendarInfo(startDate, endDate)));
+
+		});
+		
+		$('.fc-next-button').click(function(e){
+			
+			// 基準付の取得
+			var now = criterion;
+			now = computeMonth(now.getFullYear(), (now.getMonth()+1), 1);
+			criterion = now;
+			if(now.getTime() != edDt.getTime()){ return;}
+			
+			// 表示用startDate,endDateの計算
+			stDt = computeMonth(now.getFullYear(), (now.getMonth()+1), -monthRange);
+			edDt = computeMonth(now.getFullYear(), (now.getMonth()+1), monthRange);
+			
+			var startDate = formatDateToString(stDt, 's');
+			var endDate = formatDateToString(edDt, 'e');
+
+			$('#calendar').fullCalendar('removeEvents');
+			setRenderEven(JSON.parse(getCalendarInfo(startDate, endDate)));
+
+		});
+		
+		//-------------------
+		//todayボタン押下時に初期化処理を呼ぶように修正
+		//-------------------
+		$('.fc-today-button').click(function(e){
+			criterion = new Date();
+			$('#calendar').fullCalendar('removeEvents');
+			init();
+		});
+	});
+
+</script>
+	
+</body>
+</html>

@@ -1,0 +1,178 @@
+﻿<AML>
+ <Item type="Method" id="24A065E3AF3B48F5A7DBAE8E4FC7D250" action="add">
+  <comments>カレンダーイベント情報の取得</comments>
+  <execution_allowed_to keyed_name="World" type="Identity">A73B655731924CD0B027E4F4D5FCC0A9</execution_allowed_to>
+  <method_code><![CDATA[Innovator inn = this.getInnovator();
+I18NSessionContext cntx = inn.getI18NSessionContext();
+
+CCO.Utilities.WriteDebug("test","Ext_GetCalendarInfo");
+CCO.Utilities.WriteDebug("test","Login User:" + inn.getUserID());
+CCO.Utilities.WriteDebug("test","locale:" + cntx.GetLocale());
+CCO.Utilities.WriteDebug("test","languageCode:" + cntx.GetLanguageCode());
+CCO.Utilities.WriteDebug("test","timeZone:" + cntx.GetTimeZone());
+CCO.Utilities.WriteDebug("test","this:" + this.ToString());
+
+    //ログインユーザ所属Identiy取得
+    String identitylist = Aras.Server.Security.Permissions.Current.IdentitiesList;
+    CCO.Utilities.WriteDebug("test","identitylist:" + identitylist);
+
+    //Inbasket情報の取得
+    StringBuilder sqlString = new StringBuilder();
+    
+    // 現在の日付を取得する
+    DateTime dtToday = DateTime.Today;
+
+    //パラメータ取得
+    string startDate = this.getProperty("startDate", dtToday.AddMonths(-1).ToString("yyyy-MM-01"));
+    string endDate = this.getProperty("endDate", EndOfMonth(dtToday.AddMonths(1)).ToString("yyyy-MM-dd"));
+
+    sqlString.Append("select");
+    sqlString.Append(" t.[ID],");
+    sqlString.Append(" t.[CONFIG_ID],");
+    sqlString.Append(" t.[KEYED_NAME],");
+    sqlString.Append(" t.[STATE],");
+    sqlString.Append(" t.[CONTAINER],");
+    sqlString.Append(" t.[CONTAINER_TYPE_ID],");
+    sqlString.Append(" convert(NVARCHAR,Innovator.ConvertToLocal(t.[DUE_DATE],'Tokyo Standard Time'),120) as DUE_DATE,");
+    sqlString.Append(" t.[INSTRUCTIONS],");
+    sqlString.Append(" t.[ITEM],");
+    sqlString.Append(" t.[ITEM_TYPE_ID],");
+    sqlString.Append(" t.[NAME],");
+    sqlString.Append(" convert(NVARCHAR,Innovator.ConvertToLocal(t.[START_DATE],'Tokyo Standard Time'),120) as START_DATE,");
+    sqlString.Append(" t.[ITEMTYPE],");
+    sqlString.Append(" i.[NAME] as RELATION_ITEM,");
+    sqlString.Append(" IsNull(wp.[KEYED_NAME],p.[KEYED_NAME] + ' ' + t.[KEYED_NAME]) as CONTAINER_NAME,");
+    sqlString.Append(" it.[KEYED_NAME] as ASSIGNED_TO ");
+    sqlString.Append("from [innovator].[INBASKET_TASK] as t ");
+    sqlString.Append(" inner join [innovator].[ITEMTYPE] as i on t.[ITEM_TYPE_ID] = i.[id] ");
+    sqlString.Append(" inner join [innovator].[IDENTITY] as it on t.[ASSIGNED_TO] = it.[id] ");
+    sqlString.Append(" left join innovator.[Workflow_Process] as wp on t.[CONTAINER] = wp.[id] ");
+    sqlString.Append(" left join innovator.[Project] as p on t.[CONTAINER] = p.[id] ");
+    sqlString.Append("where");
+    sqlString.Append(" t.[MY_ASSIGNMENT] = '1'");
+    sqlString.Append(" and (t.[LANGUAGE_CODE_FILTER] = '" + cntx.GetLanguageCode()+ "' or  t.[LANGUAGE_CODE_FILTER] is null)");
+    sqlString.Append(" and t.[ASSIGNED_TO] in (" + identitylist + ")");
+    sqlString.Append(" and t.[STATE] != 'Closed'");
+    sqlString.Append(" and t.[START_DATE] >= '").Append(startDate).Append("'");
+    sqlString.Append(" and t.[START_DATE] <= '").Append(endDate).Append("'");
+    
+    Item itm_baskets = inn.applySQL(sqlString.ToString());
+ 
+    //結果の格納
+    StringBuilder responseSb = new StringBuilder();
+    string classNm = "";
+    string tooltipId = "";
+    string linkid = "";
+    string tips = "";
+    string targetItem = "";
+    Item itmDetail = null;
+    if (!itm_baskets.isError() && itm_baskets.getItemCount() != 0)
+    {
+        responseSb.Append("[");
+        
+        for(int i=0; i<itm_baskets.getItemCount(); i++){
+            linkid = "";
+            
+            if(i!=0){
+                responseSb.Append(",");
+            }
+            Item itm_basket = itm_baskets.getItemByIndex(i);
+            CCO.Utilities.WriteDebug("test","itm_basket:" + itm_basket.ToString());
+            
+            //WFの場合
+            if(itm_basket.getProperty("itemtype", "").Equals("321BD822949149C597FD596B1212B85C"))
+            {
+                classNm = "class-wf";
+                tooltipId = "tooltip-wf";
+                
+                //WF詳細情報の取得
+                itmDetail = inn.newItem(itm_basket.getProperty("relation_item", ""));
+                itmDetail.setID(itm_basket.getProperty("item", "keyed_name"));
+                itmDetail.setAttribute("select","id,keyed_name");
+                CCO.Utilities.WriteDebug("test","itmDetail:" + itmDetail.ToString());
+                itmDetail = itmDetail.apply("get");
+                CCO.Utilities.WriteDebug("test","itmDetail:" + itmDetail.ToString());
+                if (!itm_baskets.isError()){
+                    linkid = itmDetail.getProperty("id","");
+                }
+                targetItem = itm_basket.getProperty("relation_item", "");
+            }
+            //Projectの場合
+            else
+            {
+                // タスクの種別判定
+                Item mil = inn.newItem("ACTIVITY2", "get");
+                mil.setProperty("is_milestone", "1");
+                mil.setProperty("id", itm_basket.getProperty("config_id"));
+                CCO.Utilities.WriteDebug("test","mil_s:" + mil.ToString());
+                mil = mil.apply();
+                CCO.Utilities.WriteDebug("test","mil_e:" + mil.ToString());
+                if(mil.isEmpty()){
+                    classNm = "class-pj";
+                    tooltipId = "tooltip-pj";
+                }else{
+                    classNm = "class-ms";
+                    tooltipId = "tooltip-ms";
+                }
+                linkid = itm_basket.getProperty("container", "");
+                targetItem = "Project";
+            }
+            
+            //tipsの設定
+            tips = "Title:" + itm_basket.getProperty("container_name", "") + "<BR>" + 
+            		"Assigned to:" + itm_basket.getProperty("assigned_to", "") + "<BR>" + 
+            		"Target Item:" + itm_basket.getProperty("relation_item", "") + "<BR>"+ 
+            		"Status:" + itm_basket.getProperty("state", "") + "<BR>" + 
+            		"Instructions:" + itm_basket.getProperty("instructions", "") + "<BR>";
+            
+            responseSb.Append("{");
+            responseSb.Append("\"id\": \"");
+            responseSb.Append(itm_basket.getProperty("id", ""));
+            responseSb.Append("\",\"title\": \"");
+            responseSb.Append(itm_basket.getProperty("container_name", ""));
+            responseSb.Append("\",\"className\":\"");
+            responseSb.Append(classNm);
+            responseSb.Append("\",\"start\": \"");
+            responseSb.Append(itm_basket.getProperty("start_date", "").Substring(0, 10));
+            responseSb.Append("\",\"end\": \"");
+            responseSb.Append(itm_basket.getProperty("due_date", "").Substring(0, 10));
+            responseSb.Append("\",\"tooltip\": \"");
+            responseSb.Append("<div id='tooltip' class='").Append(tooltipId).Append("'>" + tips + "</div>");
+            responseSb.Append("\",\"linkid\":\"");
+            responseSb.Append(linkid);
+            responseSb.Append("\",\"targetItem\":\"");
+            responseSb.Append(targetItem);
+            responseSb.Append("\"}");
+        }
+        responseSb.Append("]");
+    }
+
+    string jsonData = responseSb.ToString();
+
+    return inn.newResult(jsonData);
+}
+
+/// <summary>
+/// 該当年月の日数を返す
+/// </summary>
+/// <param name="dt">DateTime</param>
+/// <returns>DateTime</returns>
+private int DaysInMonth(DateTime dt)
+{
+    return DateTime.DaysInMonth(dt.Year, dt.Month);
+}
+
+/// <summary>
+/// 月末日を返す
+/// </summary>
+/// <param name="dt">DateTime</param>
+/// <returns>DateTime</returns>
+private DateTime EndOfMonth(DateTime dt)
+{
+    return new DateTime(dt.Year, dt.Month, DaysInMonth(dt));
+//}
+]]></method_code>
+  <method_type>C#</method_type>
+  <name>Ext_GetCalendarInfo</name>
+ </Item>
+</AML>
